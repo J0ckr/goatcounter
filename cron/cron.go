@@ -12,6 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 	"zgo.at/goatcounter"
+	"zgo.at/goatcounter/acme"
 	"zgo.at/utils/syncutil"
 	"zgo.at/zdb"
 	"zgo.at/zhttp/ctxkey"
@@ -26,6 +27,7 @@ type task struct {
 var tasks = []task{
 	{persistAndStat, 10 * time.Second},
 	{DataRetention, 1 * time.Hour},
+	{renewACME, 24 * time.Hour},
 }
 
 var (
@@ -184,6 +186,23 @@ func ReindexStats(ctx context.Context, hits []goatcounter.Hit) error {
 		err := UpdateStats(ctx, siteID, hits)
 		if err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func renewACME(ctx context.Context) error {
+	var sites goatcounter.Sites
+	err := sites.ListCnames(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range sites {
+		err := acme.Make(*s.Cname)
+		if err != nil {
+			zlog.Module("cron-acme").Error(err)
 		}
 	}
 
